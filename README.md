@@ -86,14 +86,3 @@ Alle Einstellungen werden im `Key=Value`-Format in der `credentials.txt` gespeic
 * **Inhalt:** Betreff, Ort (`Vor Ort`, `Remote` oder Kundenadresse) sowie Notizen inklusive Ticketnummer, Auftrag und vollständiger Änderungshistorie werden automatisch in den Outlook-Termin übernommen.
 
 ---
-
-## 🔒 Sicherheit & `.gitignore`
-
-Auch wenn das Passwort per DPAPI verschlüsselt gespeichert wird, enthält die `credentials.txt` interne Server-URLs, Benutzernamen und Mitarbeiterlisten. **Diese Datei sowie erzeugte JSON-Exporte sollten niemals in ein Git-Repository eingecheckt werden.**
-
-Empfohlene `.gitignore`:
-```gitignore
-credentials.txt
-PM_Kalender_*.json
-*.dll
-```

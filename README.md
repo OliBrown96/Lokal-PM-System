@@ -86,3 +86,8 @@ Alle Einstellungen werden im `Key=Value`-Format in der `credentials.txt` gespeic
 * **Inhalt:** Betreff, Ort (`Vor Ort`, `Remote` oder Kundenadresse) sowie Notizen inklusive Ticketnummer, Auftrag und vollständiger Änderungshistorie werden automatisch in den Outlook-Termin übernommen.
 
 ---
+
+## 📄 Lizenz & Drittanbieter
+
+- Dieses Skript steht unter der [MIT-Lizenz](LICENSE).
+- Nutzt [HtmlAgilityPack](https://html-agility-pack.net/) (lizenziert unter der MIT-Lizenz, © ZZZ Projects).

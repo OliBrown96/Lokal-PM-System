@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monatskalender – Teamübersicht</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --border: #dde2ea;
+      --border-strong: #c5cdd9;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --weekend-bg: #f1f5f9;
+      --today-bg: #eff6ff;
+      --shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Top Toolbar */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 30;
+    }
+
+    .title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .title-group h1 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    .badge-meta {
+      background: #e2e8f0;
+      color: #334155;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 999px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    input[type="text"],
+    select {
+      padding: 6px 10px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: #fff;
+      color: var(--text);
+    }
+
+    input[type="text"]:focus,
+    select:focus {
+      outline: 2px solid rgba(37, 99, 235, 0.25);
+      border-color: var(--primary);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .btn:hover {
+      background: #f8fafc;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    /* Info / Fallback Banner */
+    #statusBanner {
+      display: none;
+      background: #fffbeb;
+      border-bottom: 1px solid #fcd34d;
+      color: #92400e;
+      padding: 10px 20px;
+      font-size: 0.86rem;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    #statusBanner.error {
+      background: #fef2f2;
+      border-bottom-color: #fecaca;
+      color: #991b1b;
+    }
+
+    /* Calendar Matrix Wrapper */
+    .table-container {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+      background: var(--surface);
+    }
+
+    table {
+      border-collapse: separate;
+      border-spacing: 0;
+      width: max-content;
+      min-width: 100%;
+      table-layout: fixed;
+    }
+
+    th,
+    td {
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      padding: 0;
+    }
+
+    /* Sticky Top Header */
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      z-index: 20;
+      border-bottom: 2px solid var(--border-strong);
+      padding: 8px 4px;
+      text-align: center;
+      font-size: 0.78rem;
+      font-weight: 600;
+      width: 135px;
+      min-width: 135px;
+    }
+
+    thead th.weekend {
+      background: #eef2f6;
+      color: #64748b;
+    }
+
+    thead th .day-name {
+      display: block;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    thead th .day-num {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    /* Sticky Left User Column */
+    thead th.user-col-header,
+    tbody td.user-cell {
+      position: sticky;
+      left: 0;
+      width: 210px;
+      min-width: 210px;
+      max-width: 210px;
+      background: var(--surface);
+      border-right: 2px solid var(--border-strong);
+      text-align: left;
+    }
+
+    thead th.user-col-header {
+      z-index: 25;
+      background: #f8fafc;
+      padding: 10px 12px;
+      vertical-align: middle;
+      font-size: 0.85rem;
+    }
+
+    tbody td.user-cell {
+      z-index: 10;
+      padding: 10px 12px;
+    }
+
+    tbody tr:hover td.user-cell {
+      background: #f8fafc;
+    }
+
+    .user-name {
+      font-weight: 600;
+      font-size: 0.88rem;
+      margin-bottom: 3px;
+      word-break: break-word;
+    }
+
+    .user-stats {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+    }
+
+    /* Day Cells */
+    td.day-cell {
+      padding: 5px;
+      min-height: 68px;
+      height: 68px;
+      background: #fff;
+      transition: background 0.1s;
+    }
+
+    td.day-cell.weekend {
+      background: var(--weekend-bg);
+    }
+
+    tbody tr:hover td.day-cell {
+      background: #fafcff;
+    }
+
+    tbody tr:hover td.day-cell.weekend {
+      background: #e9eef5;
+    }
+
+    /* Event Cards */
+    .event-card {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: none;
+      border-left: 4px solid var(--primary);
+      background: #eff6ff;
+      color: #1e293b;
+      border-radius: 4px;
+      padding: 4px 6px;
+      margin-bottom: 4px;
+      font-size: 0.75rem;
+      line-height: 1.25;
+      cursor: pointer;
+      transition: transform 0.08s ease, box-shadow 0.12s ease, filter 0.12s ease;
+      overflow: hidden;
+    }
+
+    .event-card:last-child {
+      margin-bottom: 0;
+    }
+
+    .event-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 3px 8px rgba(15, 23, 42, 0.12);
+      filter: brightness(0.97);
+    }
+
+    .event-time {
+      font-weight: 700;
+      font-size: 0.7rem;
+      opacity: 0.85;
+      display: flex;
+      justify-content: space-between;
+      gap: 4px;
+    }
+
+    .event-title {
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+
+    .event-sub {
+      font-size: 0.69rem;
+      color: #475569;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Empty / Dropzone State */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .drop-box {
+      border: 2px dashed var(--border-strong);
+      border-radius: 12px;
+      padding: 36px 48px;
+      background: #f8fafc;
+      max-width: 520px;
+    }
+
+    .drop-box.dragover {
+      border-color: var(--primary);
+      background: #eff6ff;
+    }
+
+    /* Modal Dialog */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.5);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--surface);
+      border-radius: 10px;
+      width: 100%;
+      max-width: 680px;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      animation: modalIn 0.14s ease-out;
+    }
+
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.97); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      background: #f8fafc;
+    }
+
+    .modal-header h2 {
+      margin: 0 0 4px 0;
+      font-size: 1.05rem;
+    }
+
+    .modal-subtitle {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.4rem;
+      line-height: 1;
+      cursor: pointer;
+      color: var(--text-muted);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .modal-close:hover {
+      background: #e2e8f0;
+      color: var(--text);
+    }
+
+    .modal-body {
+      padding: 18px 20px;
+      overflow-y: auto;
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .detail-section {
+      margin-bottom: 18px;
+    }
+
+    .detail-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .detail-section h3 {
+      margin: 0 0 8px 0;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 165px 1fr;
+      gap: 6px 12px;
+    }
+
+    .detail-label {
+      font-weight: 600;
+      color: #475569;
+    }
+
+    .detail-value {
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .status-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    .history-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      border-left: 2px solid var(--border-strong);
+      padding-left: 12px;
+    }
+
+    .history-list li {
+      margin-bottom: 10px;
+      font-size: 0.82rem;
+    }
+
+    .history-meta {
+      font-weight: 600;
+      color: #334155;
+    }
+
+    details.raw-json {
+      margin-top: 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: #f8fafc;
+    }
+
+    details.raw-json summary {
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    details.raw-json pre {
+      margin: 8px 0 0 0;
+      font-size: 0.75rem;
+      overflow-x: auto;
+      max-height: 220px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-group">
+      <h1 id="pageTitle">Kalenderübersicht</h1>
+      <span class="badge-meta" id="periodBadge">DF_Kalender_2026-12.json</span>
+    </div>
+
+    <div class="controls">
+      <input type="text" id="searchInput" placeholder="Suche (User, Kunde, Beschreibung...)" />
+      <select id="categoryFilter">
+        <option value="">Alle Kategorien</option>
+      </select>
+      <label class="btn btn-primary" for="fileInput" title="Andere oder lokale JSON-Datei auswählen">
+        JSON-Datei laden
+      </label>
+      <input type="file" id="fileInput" accept=".json,application/json" style="display:none" />
+    </div>
+  </header>
+
+  <div id="statusBanner">
+    <span id="statusText"></span>
+    <label class="btn" for="fileInput">Datei manuell auswählen</label>
+  </div>
+
+  <main class="table-container" id="mainContainer">
+    <div class="empty-state" id="emptyState">
+      <div class="drop-box" id="dropBox">
+        <h2 style="margin-top:0;">Lade <code>DF_Kalender_2026-12.json</code> ...</h2>
+        <p style="font-size:0.88rem; line-height:1.5;">
+          Falls die Datei beim lokalen Öffnen (<code>file://</code>) vom Browser aus Sicherheitsgründen (CORS) nicht automatisch geladen werden darf, wähle sie hier aus oder ziehe sie einfach in dieses Fenster.
+        </p>
+        <label class="btn btn-primary" for="fileInput" style="margin-top:10px;">
+          DF_Kalender_YYYY-MM.json auswählen
+        </label>
+      </div>
+    </div>
+  </main>
+
+  <!-- Detail Modal -->
+  <div class="modal-backdrop" id="detailModal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="modalTitle">Termindetails</h2>
+          <div class="modal-subtitle" id="modalSubtitle"></div>
+        </div>
+        <button class="modal-close" id="modalClose" aria-label="Schließen">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_JSON_FILE = "DF_Kalender_YYYY-MM.json";
+    const WEEKDAYS_DE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+    let calendarData = null;
+
+    const mainContainer = document.getElementById("mainContainer");
+    const statusBanner = document.getElementById("statusBanner");
+    const statusText = document.getElementById("statusText");
+    const searchInput = document.getElementById("searchInput");
+    const categoryFilter = document.getElementById("categoryFilter");
+    const fileInput = document.getElementById("fileInput");
+    const detailModal = document.getElementById("detailModal");
+    const modalClose = document.getElementById("modalClose");
+
+    // 1. Automatischer Versuch, DF_Kalender_2026-12.json aus demselben Ordner zu laden
+    window.addEventListener("DOMContentLoaded", () => {
+      loadFromUrl(DEFAULT_JSON_FILE);
+    });
+
+    async function loadFromUrl(url) {
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} (${response.statusText})`);
+        }
+        const data = await response.json();
+        hideBanner();
+        initCalendar(data, url);
+      } catch (err) {
+        console.warn("Automatisches Laden fehlgeschlagen:", err);
+        showBanner(
+          `Hinweis: "${url}" konnte nicht automatisch geladen werden (bei lokalem Öffnen über file:// blockieren Browser oft fetch()-Zugriffe). Bitte wähle die Datei einmalig manuell aus.`,
+          false
+        );
+      }
+    }
+
+    // 2. Manueller Datei-Upload & Drag-and-Drop Fallback
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (file) readLocalFile(file);
+    });
+
+    document.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      const box = document.getElementById("dropBox");
+      if (box) box.classList.add("dragover");
+    });
+
+    document.addEventListener("dragleave", () => {
+      const box = document.getElementById("dropBox");
+      if (box) box.classList.remove("dragover");
+    });
+
+    document.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const box = document.getElementById("dropBox");
+      if (box) box.classList.remove("dragover");
+      const file = e.dataTransfer?.files?.[0];
+      if (file) readLocalFile(file);
+    });
+
+    function readLocalFile(file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          hideBanner();
+          initCalendar(data, file.name);
+        } catch (err) {
+          showBanner(`Fehler beim Lesen der JSON-Datei: ${err.message}`, true);
+        }
+      };
+      reader.readAsText(file, "UTF-8");
+    }
+
+    function showBanner(msg, isError) {
+      statusText.textContent = msg;
+      statusBanner.className = isError ? "error" : "";
+      statusBanner.style.display = "flex";
+    }
+
+    function hideBanner() {
+      statusBanner.style.display = "none";
+    }
+
+    // Filter Events
+    searchInput.addEventListener("input", () => {
+      if (calendarData) renderMatrix();
+    });
+
+    categoryFilter.addEventListener("change", () => {
+      if (calendarData) renderMatrix();
+    });
+
+    // Modal schließen
+    modalClose.addEventListener("click", closeModal);
+    detailModal.addEventListener("click", (e) => {
+      if (e.target === detailModal) closeModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeModal();
+    });
+
+    function closeModal() {
+      detailModal.classList.remove("open");
+    }
+
+    function initCalendar(data, sourceName) {
+      calendarData = data;
+      document.getElementById("periodBadge").textContent = sourceName;
+
+      // Kategorien für Filter sammeln
+      const categories = new Set();
+      (data.users || []).forEach((u) => {
+        (u.entries || []).forEach((entry) => {
+          if (entry.category) categories.add(entry.category);
+        });
+      });
+
+      categoryFilter.innerHTML = '<option value="">Alle Kategorien</option>';
+      Array.from(categories).sort().forEach((cat) => {
+        const opt = document.createElement("option");
+        opt.value = cat;
+        opt.textContent = cat;
+        categoryFilter.appendChild(opt);
+      });
+
+      renderMatrix();
+    }
+
+    // Alle Tage des Monats ermitteln
+    function getMonthDays(data) {
+      const meta = data.calendarMeta || {};
+      let year = 2026;
+      let month = 12; // Fallback Dezember 2026
+      let numDays = Number(meta.detectedDays) || 0;
+
+      // Versuch periodStart auszulesen (z. B. "2026-12-01")
+      if (meta.periodStart && /^\d{4}-\d{2}-\d{2}/.test(meta.periodStart)) {
+        const parts = meta.periodStart.slice(0, 10).split("-").map(Number);
+        year = parts[0];
+        month = parts[1];
+      } else {
+        // Fallback: Erstes gültiges Datum aus den Einträgen suchen
+        outer: for (const u of data.users || []) {
+          for (const e of u.entries || []) {
+            if (e.date && /^\d{4}-\d{2}-\d{2}/.test(e.date)) {
+              const parts = e.date.slice(0, 10).split("-").map(Number);
+              year = parts[0];
+              month = parts[1];
+              break outer;
+            }
+          }
+        }
+      }
+
+      if (!numDays || numDays < 28 || numDays > 31) {
+        numDays = new Date(year, month, 0).getDate();
+      }
+
+      const monthName = new Date(year, month - 1, 1).toLocaleDateString("de-DE", {
+        month: "long",
+        year: "numeric"
+      });
+      document.getElementById("pageTitle").textContent = `Kalenderübersicht – ${monthName}`;
+
+      const days = [];
+      for (let d = 1; d <= numDays; d++) {
+        const dateObj = new Date(year, month - 1, d);
+        const iso = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const dow = dateObj.getDay();
+        days.push({
+          iso,
+          dayNum: d,
+          weekday: WEEKDAYS_DE[dow],
+          isWeekend: dow === 0 || dow === 6
+        });
+      }
+      return days;
+    }
+
+    function renderMatrix() {
+      const days = getMonthDays(calendarData);
+      const query = searchInput.value.trim().toLowerCase();
+      const selectedCat = categoryFilter.value;
+      const users = calendarData.users || [];
+
+      const table = document.createElement("table");
+
+      // THEAD
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+
+      const cornerTh = document.createElement("th");
+      cornerTh.className = "user-col-header";
+      cornerTh.textContent = `Mitarbeiter (${users.length})`;
+      headRow.appendChild(cornerTh);
+
+      days.forEach((day) => {
+        const th = document.createElement("th");
+        if (day.isWeekend) th.classList.add("weekend");
+        th.innerHTML = `<span class="day-name">${day.weekday}</span><span class="day-num">${String(day.dayNum).padStart(2, "0")}.</span>`;
+        headRow.appendChild(th);
+      });
+
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      // TBODY
+      const tbody = document.createElement("tbody");
+
+      users.forEach((user) => {
+        const allEntries = user.entries || [];
+
+        // Einträge filtern
+        const filteredEntries = allEntries.filter((entry) => {
+          if (selectedCat && entry.category !== selectedCat) return false;
+          if (!query) return true;
+          const haystack = JSON.stringify({
+            user: user.displayName,
+            category: entry.category,
+            description: entry.description,
+            rawLabels: entry.rawLabels,
+            status: entry.status,
+            meeting: entry.meetingDetails,
+            absence: entry.absenceDetails,
+            special: entry.specialtimeDetails
+          }).toLowerCase();
+          return haystack.includes(query);
+        });
+
+        // Wenn Suchfilter aktiv ist und User weder per Name noch über Termine matcht -> ausblenden
+        if (query && filteredEntries.length === 0 && !(user.displayName || "").toLowerCase().includes(query)) {
+          return;
+        }
+
+        // Einträge nach Datum (YYYY-MM-DD) gruppieren
+        const entriesByDate = {};
+        let totalHours = 0;
+
+        filteredEntries.forEach((entry) => {
+          const dateKey = (entry.date || "").slice(0, 10);
+          if (!entriesByDate[dateKey]) entriesByDate[dateKey] = [];
+          entriesByDate[dateKey].push(entry);
+          const dur = parseFloat(entry.durationHours);
+          if (!isNaN(dur)) totalHours += dur;
+        });
+
+        const tr = document.createElement("tr");
+
+        // User-Spalte
+        const userTd = document.createElement("td");
+        userTd.className = "user-cell";
+        userTd.innerHTML = `
+          <div class="user-name">${escapeHtml(user.displayName || user.userId || "Unbekannt")}</div>
+          <div class="user-stats">${filteredEntries.length} Termine · ${totalHours.toFixed(1)} Std.</div>
+        `;
+        tr.appendChild(userTd);
+
+        // Tages-Spalten
+        days.forEach((day) => {
+          const td = document.createElement("td");
+          td.className = "day-cell" + (day.isWeekend ? " weekend" : "");
+
+          const dayEntries = (entriesByDate[day.iso] || []).sort((a, b) =>
+            (a.startDateTime || "").localeCompare(b.startDateTime || "")
+          );
+
+          dayEntries.forEach((entry) => {
+            const btn = createEventCard(entry, user);
+            td.appendChild(btn);
+          });
+
+          tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      mainContainer.innerHTML = "";
+      mainContainer.appendChild(table);
+    }
+
+    function createEventCard(entry, user) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "event-card";
+
+      const accentColor = resolveColor(entry);
+      btn.style.borderLeftColor = accentColor;
+      btn.style.backgroundColor = hexToRgba(accentColor, 0.13);
+
+      const timeRange = formatTimeRange(entry);
+      const title = getEntryTitle(entry);
+      const sub = getEntrySubtitle(entry);
+
+      btn.innerHTML = `
+        <div class="event-time">
+          <span>${escapeHtml(timeRange)}</span>
+          ${entry.durationHours ? `<span>${escapeHtml(String(entry.durationHours))}h</span>` : ""}
+        </div>
+        <div class="event-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+        ${sub ? `<div class="event-sub" title="${escapeHtml(sub)}">${escapeHtml(sub)}</div>` : ""}
+      `;
+
+      btn.addEventListener("click", () => openDetailModal(entry, user));
+      return btn;
+    }
+
+    function getEntryTitle(entry) {
+      if (entry.absenceDetails) {
+        return entry.absenceDetails.absenceTypeName || entry.absenceDetails.absenceReasonName || entry.category || "Abwesenheit";
+      }
+      if (entry.specialtimeDetails) {
+        return entry.specialtimeDetails.specialtimeTypeName || entry.description || entry.category || "Sonderzeit";
+      }
+      if (entry.meetingDetails) {
+        const cust = Array.isArray(entry.meetingDetails.customerLines) ? entry.meetingDetails.customerLines[1] || entry.meetingDetails.customerLines[0] : "";
+        return cust || entry.meetingDetails.operationName || entry.description || entry.category || "Termin";
+      }
+      if (Array.isArray(entry.rawLabels) && entry.rawLabels.length > 0) {
+        return entry.rawLabels[0];
+      }
+      if (typeof entry.rawLabels === "string" && entry.rawLabels.trim()) {
+        return entry.rawLabels;
+      }
+      return entry.description || entry.category || "Eintrag";
+    }
+
+    function getEntrySubtitle(entry) {
+      if (entry.meetingDetails) {
+        return entry.meetingDetails.operationName || entry.description || entry.status || "";
+      }
+      if (entry.absenceDetails) {
+        return entry.absenceDetails.absenceReasonName || entry.description || "";
+      }
+      if (entry.specialtimeDetails) {
+        return entry.description || "";
+      }
+      return entry.status || "";
+    }
+
+    function formatTimeRange(entry) {
+      const extractTime = (dt) => {
+        if (!dt) return "";
+        const match = String(dt).match(/(\d{2}:\d{2})/);
+        return match ? match[1] : "";
+      };
+
+      let start = extractTime(entry.startDateTime);
+      let end = extractTime(entry.endDateTime);
+
+      if (!start && entry.meetingDetails) {
+        start = extractTime(entry.meetingDetails.meetingTimeFrom);
+        end = extractTime(entry.meetingDetails.meetingTimeUntil);
+      }
+      if (!start && entry.specialtimeDetails) {
+        start = extractTime(entry.specialtimeDetails.specialtimeTimeFrom);
+        end = extractTime(entry.specialtimeDetails.specialtimeTimeUntil);
+      }
+
+      if (start && end) return `${start}–${end}`;
+      if (start) return start;
+      return entry.category || "Ganztägig";
+    }
+
+    function resolveColor(entry) {
+      if (entry.statusColor && (/^#[0-9a-fA-F]{3,8}$/.test(entry.statusColor) || entry.statusColor.startsWith("rgb"))) {
+        return entry.statusColor;
+      }
+      if (entry.absenceDetails) return "#d97706";     // Bernstein für Abwesenheiten
+      if (entry.specialtimeDetails) return "#7c3aed"; // Violett für Sonderzeiten
+      return "#2563eb";                               // Blau für reguläre Termine
+    }
+
+    function hexToRgba(color, alpha) {
+      if (!color.startsWith("#")) return "rgba(37, 99, 235, 0.12)";
+      let hex = color.slice(1);
+      if (hex.length === 3) {
+        hex = hex.split("").map((c) => c + c).join("");
+      }
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      if ([r, g, b].some(isNaN)) return "rgba(37, 99, 235, 0.12)";
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    // Detail-Popup befüllen und öffnen
+    function openDetailModal(entry, user) {
+      const title = getEntryTitle(entry);
+      const color = resolveColor(entry);
+
+      document.getElementById("modalTitle").textContent = title;
+      document.getElementById("modalSubtitle").textContent =
+        `${user.displayName || user.userId} · ${formatDateDe(entry.date)} (${formatTimeRange(entry)})`;
+
+      let html = `
+        <div class="detail-section">
+          <h3>Allgemeine Informationen</h3>
+          <div class="detail-grid">
+            <div class="detail-label">Mitarbeiter:</div>
+            <div class="detail-value">${escapeHtml(user.displayName || user.userId || "-")}</div>
+
+            <div class="detail-label">Kategorie:</div>
+            <div class="detail-value">${escapeHtml(entry.category || "-")}</div>
+
+            <div class="detail-label">Datum & Zeit:</div>
+            <div class="detail-value">${escapeHtml(formatDateDe(entry.date))} · ${escapeHtml(formatTimeRange(entry))} (${escapeHtml(String(entry.durationHours ?? "-"))} Std.)</div>
+
+            <div class="detail-label">Status:</div>
+            <div class="detail-value">
+              <span class="status-pill" style="background:${hexToRgba(color, 0.18)}; color:#0f172a; border-color:${color};">
+                ${escapeHtml(entry.status || "-")}
+              </span>
+            </div>
+
+            <div class="detail-label">Ausführungsart:</div>
+            <div class="detail-value">${escapeHtml(entry.executionType || "-")}</div>
+
+            <div class="detail-label">Beschreibung:</div>
+            <div class="detail-value">${escapeHtml(entry.description || "-")}</div>
+
+            ${entry.rawLabels ? `
+              <div class="detail-label">Labels:</div>
+              <div class="detail-value">${escapeHtml(Array.isArray(entry.rawLabels) ? entry.rawLabels.join(" | ") : String(entry.rawLabels))}</div>
+            ` : ""}
+          </div>
+        </div>
+      `;
+
+      // Meeting Details
+      if (entry.meetingDetails) {
+        const m = entry.meetingDetails;
+        html += `
+          <div class="detail-section">
+            <h3>Einsatz- / Kundendetails</h3>
+            <div class="detail-grid">
+              <div class="detail-label">Kunde:</div>
+              <div class="detail-value">${formatLines(m.customerLines)}</div>
+
+              <div class="detail-label">Ansprechpartner:</div>
+              <div class="detail-value">${formatLines(m.contactLines)}</div>
+
+              <div class="detail-label">Tätigkeit / Vorgang:</div>
+              <div class="detail-value">${escapeHtml(m.operationName || "-")}</div>
+
+              <div class="detail-label">Einsatzart:</div>
+              <div class="detail-value">${escapeHtml(m.useName || "-")}</div>
+
+              <div class="detail-label">Auftrag / Ticket:</div>
+              <div class="detail-value">${escapeHtml([formatLines(m.orderLines, true), m.ticket].filter(Boolean).join(" / ") || "-")}</div>
+
+              <div class="detail-label">Beschreibung:</div>
+              <div class="detail-value">${escapeHtml(m.description || "-")}</div>
+            </div>
+          </div>
+        `;
+
+        if (Array.isArray(m.history) && m.history.length > 0) {
+          html += `
+            <div class="detail-section">
+              <h3>Verlauf (${m.history.length})</h3>
+              <ul class="history-list">
+                ${m.history.map((h) => `
+                  <li>
+                    <div class="history-meta">${escapeHtml(h.timestampRaw || h.timestampIso || "")} – ${escapeHtml(h.author || "")}</div>
+                    <div>Status: <strong>${escapeHtml(h.status || "-")}</strong>${h.description ? ` · ${escapeHtml(h.description)}` : ""}</div>
+                  </li>
+                `).join("")}
+              </ul>
+            </div>
+          `;
+        }
+      }
+
+      // Absence Details
+      if (entry.absenceDetails) {
+        const a = entry.absenceDetails;
+        html += `
+          <div class="detail-section">
+            <h3>Abwesenheitsdetails</h3>
+            <div class="detail-grid">
+              <div class="detail-label">Abwesenheitstyp:</div>
+              <div class="detail-value">${escapeHtml(a.absenceTypeName || "-")}</div>
+
+              <div class="detail-label">Grund:</div>
+              <div class="detail-value">${escapeHtml(a.absenceReasonName || "-")}</div>
+
+              <div class="detail-label">Zeitraum:</div>
+              <div class="detail-value">${escapeHtml(formatDateDe(a.dateStart))} bis ${escapeHtml(formatDateDe(a.dateStop))}</div>
+
+              <div class="detail-label">Beschreibung:</div>
+              <div class="detail-value">${escapeHtml(a.description || "-")}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Specialtime Details
+      if (entry.specialtimeDetails) {
+        const s = entry.specialtimeDetails;
+        html += `
+          <div class="detail-section">
+            <h3>Sonderzeit-Details</h3>
+            <div class="detail-grid">
+              <div class="detail-label">Sonderzeittyp:</div>
+              <div class="detail-value">${escapeHtml(s.specialtimeTypeName || "-")}</div>
+
+              <div class="detail-label">Uhrzeit:</div>
+              <div class="detail-value">${escapeHtml(s.specialtimeTimeFrom || "")} – ${escapeHtml(s.specialtimeTimeUntil || "")}</div>
+
+              <div class="detail-label">Beschreibung:</div>
+              <div class="detail-value">${escapeHtml(s.description || "-")}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Rohdaten-Ansicht
+      html += `
+        <details class="raw-json">
+          <summary>Vollständige Rohdaten (JSON) anzeigen</summary>
+          <pre>${escapeHtml(JSON.stringify(entry, null, 2))}</pre>
+        </details>
+      `;
+
+      document.getElementById("modalBody").innerHTML = html;
+      detailModal.classList.add("open");
+    }
+
+    function formatLines(val, inline = false) {
+      if (!val) return inline ? "" : "-";
+      if (Array.isArray(val)) {
+        const cleaned = val.filter(Boolean);
+        if (cleaned.length === 0) return inline ? "" : "-";
+        return inline ? cleaned.join(", ") : cleaned.map(escapeHtml).join("<br>");
+      }
+      if (typeof val === "object") {
+        const vals = Object.values(val).filter(Boolean);
+        if (vals.length === 0) return inline ? "" : "-";
+        return inline ? vals.join(", ") : vals.map(escapeHtml).join("<br>");
+      }
+      return escapeHtml(String(val));
+    }
+
+    function formatDateDe(dateStr) {
+      if (!dateStr) return "-";
+      const match = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!match) return String(dateStr);
+      return `${match[3]}.${match[2]}.${match[1]}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+  </script>
+</body>
+</html>

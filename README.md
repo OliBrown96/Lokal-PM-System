@@ -119,5 +119,5 @@ Alle Einstellungen werden im `Key=Value`-Format in der `credentials.txt` gespeic
 
 ## 📄 Lizenz & Drittanbieter
 
-- Dieses Projekt steht unter der [GNU General Public License v3.0 (GPLv3)](LICENSE).
+- Dieses Projekt steht unter der [MIT-Lizenz](LICENSE).
 - Nutzt [HtmlAgilityPack](https://html-agility-pack.net/) (lizenziert unter der MIT-Lizenz, © ZZZ Projects).

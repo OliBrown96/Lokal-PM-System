@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    DF Kalender-Export & lokaler Outlook-Sync (Single-Config, DPAPI, dynamische URL, Workspace-ID & VPN-Check)
+    DF Kalender-Export & lokaler Outlook-Sync (Single-Config, DPAPI, dynamische URL, Workspace-ID, VPN-Check & Kollegen-Abgleich beim Kunden)
 #>
 
 [CmdletBinding()]
@@ -1589,8 +1589,146 @@ function Get-OrFetchUsersJson {
 }
 
 # ============================================================================
-# 6. Lokale Outlook-Synchronisation (COM)
+# 6. Lokale Outlook-Synchronisation (COM) inkl. Kollegen-Abgleich beim Kunden
 # ============================================================================
+function Get-CustomerMatchKey {
+    param($Entry)
+    if ($null -eq $Entry -or $Entry.category -ne "MEETING" -or $null -eq $Entry.meetingDetails) {
+        return $null
+    }
+
+    $cid = $Entry.meetingDetails.customerId
+    if (-not [string]::IsNullOrWhiteSpace($cid) -and $cid -notin @("0", "-1")) {
+        return "ID:$($cid.Trim())"
+    }
+
+    $lines = @($Entry.meetingDetails.customerLines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($lines.Count -gt 0) {
+        return "NAME:$($lines[0].Trim().ToLowerInvariant())"
+    }
+
+    return $null
+}
+
+function Format-ExecutionTypeDe {
+    param($Entry)
+    if ($null -eq $Entry) { return "Unbekannt" }
+
+    switch ($Entry.executionType) {
+        "ON_SITE" { return "Vor Ort" }
+        "REMOTE"  { return "Fernwartung" }
+    }
+
+    if ($Entry.meetingDetails -and -not [string]::IsNullOrWhiteSpace($Entry.meetingDetails.useName)) {
+        return $Entry.meetingDetails.useName.Trim()
+    }
+
+    return "Nicht angegeben"
+}
+
+function Format-EntryStatusDe {
+    param($Entry)
+    if ($null -eq $Entry) { return "Unbekannt" }
+
+    $baseStatus = switch ($Entry.status) {
+        "CONFIRMED"           { "Bestätigt" }
+        "CANCELLED_OR_ABSENT" { "Abgesagt" }
+        "BUFFER_OR_TENTATIVE" { "Vorläufig / Puffer" }
+        "OTHER"               { "Sonstiges" }
+        default               { "Unbekannt" }
+    }
+
+    $historyStatus = $null
+    if ($Entry.meetingDetails -and $Entry.meetingDetails.history -and $Entry.meetingDetails.history.Count -gt 0) {
+        foreach ($h in $Entry.meetingDetails.history) {
+            if (-not [string]::IsNullOrWhiteSpace($h.status)) {
+                $historyStatus = $h.status.Trim()
+                break
+            }
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($historyStatus) -and
+        -not $historyStatus.Equals($baseStatus, [StringComparison]::OrdinalIgnoreCase)) {
+        if ($baseStatus -in @("Unbekannt", "Sonstiges")) {
+            return $historyStatus
+        }
+        return "$baseStatus ($historyStatus)"
+    }
+
+    return $baseStatus
+}
+
+function Build-CustomerAppointmentsIndex {
+    param($Exports)
+
+    $index = @{}
+    $seenKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
+    foreach ($export in $Exports) {
+        foreach ($user in $export.users) {
+            foreach ($entry in $user.entries) {
+                if ($entry.category -ne "MEETING") { continue }
+                if ([string]::IsNullOrWhiteSpace($entry.date)) { continue }
+
+                $custKey = Get-CustomerMatchKey -Entry $entry
+                if ([string]::IsNullOrWhiteSpace($custKey)) { continue }
+
+                $dedupKey = "$($user.userId)_$($entry.entryId)_$($entry.date)"
+                if (-not $seenKeys.Add($dedupKey)) { continue }
+
+                $bucketKey = "$custKey|$($entry.date)"
+                if (-not $index.ContainsKey($bucketKey)) {
+                    $index[$bucketKey] = [System.Collections.Generic.List[object]]::new()
+                }
+
+                $timeFrom  = if ($entry.startDateTime -and $entry.startDateTime.Contains(" ")) { $entry.startDateTime.Split(' ')[1] } else { "?" }
+                $timeUntil = if ($entry.endDateTime -and $entry.endDateTime.Contains(" "))     { $entry.endDateTime.Split(' ')[1] }   else { "?" }
+
+                $index[$bucketKey].Add([PSCustomObject]@{
+                    userId        = $user.userId
+                    displayName   = $user.displayName
+                    entryId       = $entry.entryId
+                    date          = $entry.date
+                    startDateTime = $entry.startDateTime
+                    timeRange     = "$timeFrom-$timeUntil"
+                    executionDe   = Format-ExecutionTypeDe -Entry $entry
+                    statusDe      = Format-EntryStatusDe -Entry $entry
+                    operationName = if ($entry.meetingDetails) { $entry.meetingDetails.operationName } else { $null }
+                })
+            }
+        }
+    }
+
+    return $index
+}
+
+function Get-OtherTechniciansAtCustomer {
+    param($Entry, [string]$OwnUserId, [hashtable]$CustomerIndex)
+
+    if ($null -eq $Entry -or $Entry.category -ne "MEETING" -or $null -eq $CustomerIndex) {
+        return @()
+    }
+
+    $custKey = Get-CustomerMatchKey -Entry $Entry
+    if ([string]::IsNullOrWhiteSpace($custKey) -or [string]::IsNullOrWhiteSpace($Entry.date)) {
+        return @()
+    }
+
+    $bucketKey = "$custKey|$($Entry.date)"
+    if (-not $CustomerIndex.ContainsKey($bucketKey)) {
+        return @()
+    }
+
+    $matches = @(
+        $CustomerIndex[$bucketKey] |
+        Where-Object { -not $_.userId.Equals($OwnUserId, [StringComparison]::OrdinalIgnoreCase) } |
+        Sort-Object -Property startDateTime, displayName
+    )
+
+    return $matches
+}
+
 function Get-OutlookSubCalendarNames {
     $names = [System.Collections.Generic.List[string]]::new()
     $outlookApp = $null
@@ -1788,13 +1926,13 @@ function Build-OutlookLocation {
             return ($lines[1..($lines.Count - 1)] -join ", ")
         }
         if ($Entry.executionType -eq "ON_SITE") { return "Vor Ort" }
-        if ($Entry.executionType -eq "REMOTE")  { return "Remote" }
+        if ($Entry.executionType -eq "REMOTE")  { return "Fernwartung" }
     }
     return ""
 }
 
 function Build-OutlookBody {
-    param($User, $Entry)
+    param($User, $Entry, $OtherTechAppointments = @())
     $sb = [System.Text.StringBuilder]::new()
     $sb.AppendLine("Mitarbeiter: $($User.displayName)") | Out-Null
     $sb.AppendLine("Kategorie:   $($Entry.category)") | Out-Null
@@ -1807,6 +1945,15 @@ function Build-OutlookBody {
         if ($m.ticket)                       { $sb.AppendLine("Ticket:      $($m.ticket)") | Out-Null }
         if ($m.operationName)                { $sb.AppendLine("Tätigkeit:   $($m.operationName)") | Out-Null }
         if ($m.useName)                      { $sb.AppendLine("Einsatzart:  $($m.useName)") | Out-Null }
+        $sb.AppendLine("Status:      $(Format-EntryStatusDe -Entry $Entry)") | Out-Null
+
+        if ($null -ne $OtherTechAppointments -and @($OtherTechAppointments).Count -gt 0) {
+            $sb.AppendLine("`n--- Weitere Techniker beim selben Kunden (am selben Tag) ---") | Out-Null
+            foreach ($other in @($OtherTechAppointments)) {
+                $opText = if (-not [string]::IsNullOrWhiteSpace($other.operationName)) { " | Tätigkeit: $($other.operationName)" } else { "" }
+                $sb.AppendLine("- $($other.displayName) ($($other.timeRange)): $($other.executionDe) | Status: $($other.statusDe)$opText") | Out-Null
+            }
+        }
 
         if (-not [string]::IsNullOrWhiteSpace($m.description)) {
             $sb.AppendLine("`n--- Beschreibung ---") | Out-Null
@@ -1860,6 +2007,9 @@ function Sync-OutlookOwnEntries {
     $targetFolder = $null
 
     try {
+        # Kunden-Termin-Index über alle abgerufenen Techniker aufbauen
+        $customerIndex = Build-CustomerAppointmentsIndex -Exports $Exports
+
         $outlookApp = New-Object -ComObject Outlook.Application
         $ns = $outlookApp.GetNamespace("MAPI")
         $ns.Logon("", "", $false, $false)
@@ -1907,6 +2057,7 @@ function Sync-OutlookOwnEntries {
         $createdCount = 0
         $updatedCount = 0
         $skippedCount = 0
+        $colleagueMatchesCount = 0
 
         foreach ($export in $Exports) {
             $ownUsers = @($export.users | Where-Object { $_.userId.Equals($OwnUserId, [StringComparison]::OrdinalIgnoreCase) })
@@ -1961,6 +2112,11 @@ function Sync-OutlookOwnEntries {
                         }
                     }
 
+                    $otherTechs = @(Get-OtherTechniciansAtCustomer -Entry $entry -OwnUserId $OwnUserId -CustomerIndex $customerIndex)
+                    if ($otherTechs.Count -gt 0) {
+                        $colleagueMatchesCount++
+                    }
+
                     $appt = $null
                     $isUpdate = $false
 
@@ -1979,7 +2135,7 @@ function Sync-OutlookOwnEntries {
                     $appt.Start       = $startDt
                     $appt.End         = $endDt
                     $appt.Location    = Build-OutlookLocation -Entry $entry
-                    $appt.Body        = Build-OutlookBody -User $user -Entry $entry
+                    $appt.Body        = Build-OutlookBody -User $user -Entry $entry -OtherTechAppointments $otherTechs
                     $appt.Categories  = switch ($entry.category) {
                         "MEETING"     { "DF; Termin" }
                         "ABSENCE"     { "DF; Fehlzeit" }
@@ -1999,7 +2155,7 @@ function Sync-OutlookOwnEntries {
             }
         }
 
-        Write-Host "Outlook-Sync abgeschlossen: $createdCount neu erstellt, $updatedCount aktualisiert, $skippedCount übersprungen." -ForegroundColor Green
+        Write-Host "Outlook-Sync abgeschlossen: $createdCount neu erstellt, $updatedCount aktualisiert, $skippedCount übersprungen ($colleagueMatchesCount Termine mit Kollegen-Überschneidung beim Kunden)." -ForegroundColor Green
     }
     finally {
         if ($targetFolder -and ($targetFolder -ne $defaultCalendar)) {
